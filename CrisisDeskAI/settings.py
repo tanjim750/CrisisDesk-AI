@@ -170,6 +170,20 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+    'DEFAULT_THROTTLE_CLASSES': (
+        'rest_framework.throttling.ScopedRateThrottle',
+    ),
+    'DEFAULT_THROTTLE_RATES': {
+        'auth_login': os.getenv('THROTTLE_AUTH_LOGIN', '5/minute'),
+        'auth_refresh': os.getenv('THROTTLE_AUTH_REFRESH', '10/minute'),
+        'auth_logout': os.getenv('THROTTLE_AUTH_LOGOUT', '20/minute'),
+        'auth_me': os.getenv('THROTTLE_AUTH_ME', '60/minute'),
+        'reports_read': os.getenv('THROTTLE_REPORTS_READ', '120/minute'),
+        'reports_create': os.getenv('THROTTLE_REPORTS_CREATE', '10/minute'),
+        'reports_delete': os.getenv('THROTTLE_REPORTS_DELETE', '30/minute'),
+        'reports_status_update': os.getenv('THROTTLE_REPORTS_STATUS_UPDATE', '60/minute'),
+        'reports_stats': os.getenv('THROTTLE_REPORTS_STATS', '60/minute'),
+    },
     'DEFAULT_PAGINATION_CLASS': 'core.pagination.StandardResultsSetPagination',
     'PAGE_SIZE': 20,
 }

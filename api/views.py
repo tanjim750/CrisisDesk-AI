@@ -2,6 +2,7 @@ from django.db import transaction
 from django.db.models import Count
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.http import Http404
@@ -46,9 +47,24 @@ def _refresh_duplicate_group_priorities(duplicate_group_key):
             report.save(update_fields=["priority_score", "updated_at"])
 
 
+class MethodScopedThrottleMixin:
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope_by_method = {}
+
+    def get_throttles(self):
+        self.throttle_scope = self.throttle_scope_by_method.get(
+            self.request.method,
+            getattr(self, "throttle_scope", None),
+        )
+
+        return super().get_throttles()
+
+
 class ManagerLoginView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth_login"
 
     def post(self, request):
         serializer = ManagerLoginSerializer(
@@ -77,6 +93,8 @@ class ManagerLoginView(APIView):
 class ManagerTokenRefreshView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth_refresh"
 
     def post(self, request):
         serializer = ManagerTokenRefreshSerializer(data=request.data)
@@ -93,6 +111,8 @@ class ManagerTokenRefreshView(APIView):
 
 class ManagerLogoutView(APIView):
     permission_classes = [IsAuthenticated, IsManager]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth_logout"
 
     def post(self, request):
         serializer = ManagerLogoutSerializer(
@@ -112,6 +132,8 @@ class ManagerLogoutView(APIView):
 
 class ManagerMeView(APIView):
     permission_classes = [IsAuthenticated, IsManager]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "auth_me"
 
     def get(self, request):
         return success_response(
@@ -122,8 +144,12 @@ class ManagerMeView(APIView):
         )
 
 
-class ReportListCreateView(APIView):
+class ReportListCreateView(MethodScopedThrottleMixin, APIView):
     permission_classes = [AllowAny]
+    throttle_scope_by_method = {
+        "GET": "reports_read",
+        "POST": "reports_create",
+    }
 
     def get(self, request):
         queryset = Report.objects.all()
@@ -243,8 +269,12 @@ class ReportListCreateView(APIView):
         )
 
 
-class ReportDetailDeleteView(APIView):
+class ReportDetailDeleteView(MethodScopedThrottleMixin, APIView):
     permission_classes = [AllowAny]
+    throttle_scope_by_method = {
+        "GET": "reports_read",
+        "DELETE": "reports_delete",
+    }
 
     def get_permissions(self):
         if self.request.method == "DELETE":
@@ -288,6 +318,8 @@ class ReportDetailDeleteView(APIView):
 
 class ReportStatusUpdateView(APIView):
     permission_classes = [IsAuthenticated, IsManager]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "reports_status_update"
 
     def get_object(self, report_id):
         try:
@@ -326,6 +358,8 @@ class ReportStatusUpdateView(APIView):
 
 class ReportStatsSummaryView(APIView):
     permission_classes = [IsAuthenticated, IsManager]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "reports_stats"
 
     def get(self, request):
         category_breakdown = _build_count_breakdown("category")

@@ -1,7 +1,9 @@
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.core.cache import cache
+from django.test import TestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APIClient
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 from unittest.mock import patch
 
@@ -13,6 +15,20 @@ from services.duplicate_detection.duplicate_service import apply_duplicate_resul
 from services.llm.exceptions import LLMProviderUnavailableError
 from services.llm.schemas import ExtractedFeatures, TriageResult
 from services.llm.triage_service import TriageService
+
+
+THROTTLE_TEST_REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ),
+    "DEFAULT_THROTTLE_CLASSES": (
+        "rest_framework.throttling.ScopedRateThrottle",
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        "auth_login": "1/minute",
+        "reports_create": "1/minute",
+    },
+}
 
 
 class DuplicateDetectionServiceTests(TestCase):
@@ -339,6 +355,36 @@ class ReportStatsSummaryTests(TestCase):
         self.assertEqual(payload["urgencyBreakdown"]["medium"], 1)
         self.assertEqual(payload["urgencyBreakdown"]["high"], 1)
         self.assertEqual(payload["urgencyBreakdown"]["critical"], 1)
+
+
+@override_settings(REST_FRAMEWORK=THROTTLE_TEST_REST_FRAMEWORK)
+class RateLimitTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.original_throttle_rates = ScopedRateThrottle.THROTTLE_RATES
+        ScopedRateThrottle.THROTTLE_RATES = {
+            "auth_login": "1/minute",
+            "reports_create": "1/minute",
+        }
+
+    def tearDown(self):
+        ScopedRateThrottle.THROTTLE_RATES = self.original_throttle_rates
+        cache.clear()
+
+    def test_login_endpoint_is_rate_limited(self):
+        first_response = self.client.post("/api/v1/auth/login", {}, format="json")
+        second_response = self.client.post("/api/v1/auth/login", {}, format="json")
+
+        self.assertEqual(first_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(second_response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_report_create_endpoint_is_rate_limited(self):
+        first_response = self.client.post("/api/v1/reports", {}, format="json")
+        second_response = self.client.post("/api/v1/reports", {}, format="json")
+
+        self.assertEqual(first_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(second_response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
 
 
 class FakeLLMClient:
