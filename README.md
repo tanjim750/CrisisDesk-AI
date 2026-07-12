@@ -29,7 +29,7 @@ Update `.env` values as needed, especially `DJANGO_SECRET_KEY`, database credent
 Build and start the stack:
 
 ```bash
-docker compose up -d --build
+docker compose --env-file .env up -d --build
 ```
 
 Run database migrations:
