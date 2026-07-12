@@ -38,6 +38,12 @@ Run database migrations:
 docker compose exec web python manage.py migrate
 ```
 
+Collect static files for production deployments:
+
+```bash
+docker compose exec web python manage.py collectstatic --noinput
+```
+
 Create a manager user:
 
 ```bash
