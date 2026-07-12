@@ -54,7 +54,7 @@ def validate_triage_output(payload: dict) -> TriageResult:
         raise LLMInvalidOutputError("LLM output must be a JSON object")
 
     normalized_payload = _normalize_keys(payload)
-    features_payload = _normalize_keys(normalized_payload.get("features") or {})
+    features_payload = _coerce_features(_normalize_keys(normalized_payload.get("features") or {}))
 
     detected_language = normalized_payload.get("detected_language")
     category = normalized_payload.get("category")
@@ -145,3 +145,44 @@ def _validate_features(features_payload: dict):
         value = features_payload.get(field)
         if value is not None and not isinstance(value, bool):
             raise LLMInvalidOutputError(f"Invalid boolean feature: {field}")
+
+
+def _coerce_features(features_payload: dict) -> dict:
+    coerced = dict(features_payload)
+
+    for field in FEATURE_FIELDS - {"affected_people_count", "landmark"}:
+        if field in coerced:
+            coerced[field] = _coerce_nullable_bool(coerced[field])
+
+    if "affected_people_count" in coerced:
+        coerced["affected_people_count"] = _coerce_nullable_non_negative_int(
+            coerced["affected_people_count"]
+        )
+
+    return coerced
+
+
+def _coerce_nullable_bool(value):
+    if value is None or isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value > 0
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "yes", "y", "1"}:
+            return True
+        if normalized in {"false", "no", "n", "0"}:
+            return False
+
+    return value
+
+
+def _coerce_nullable_non_negative_int(value):
+    if value is None or isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
+
+    return value

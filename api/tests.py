@@ -98,6 +98,36 @@ class LLMServiceTests(TestCase):
 
         self.assertEqual(result.urgency, UrgencyLevel.CRITICAL)
 
+    def test_numeric_people_trapped_feature_is_accepted_and_normalized(self):
+        payload = valid_triage_payload(
+            category="accident",
+            urgency="critical",
+            confidence=0.98,
+            features={
+                "peopleTrapped": 50,
+                "injuryReported": True,
+                "casualtyReported": True,
+                "fireSpreading": None,
+                "roadBlocked": None,
+                "affectedPeopleCount": 60,
+                "landmark": "jigatola",
+            },
+        )
+        service = TriageService(client=FakeLLMClient([payload]))
+
+        result = service.analyze(
+            description="an old building collapsed on another building, atleast 10 death, 50 trapped inside, need help asap",
+            location="jigatola",
+            submitted_language="en",
+        )
+
+        self.assertEqual(result.category, ReportCategory.ACCIDENT)
+        self.assertEqual(result.urgency, UrgencyLevel.CRITICAL)
+        self.assertEqual(result.confidence, 0.98)
+        self.assertTrue(result.features.people_trapped)
+        self.assertEqual(result.features.affected_people_count, 60)
+        self.assertFalse(result.requires_manual_review)
+
     def test_invalid_first_output_retries_and_uses_second_output(self):
         invalid_payload = valid_triage_payload(category="critical_fire")
         service = TriageService(
