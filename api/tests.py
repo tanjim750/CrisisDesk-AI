@@ -3,6 +3,7 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
+from unittest.mock import patch
 
 from api.models import Report
 from core.constants.categories import ReportCategory
@@ -10,6 +11,7 @@ from core.constants.statuses import ReportStatus
 from core.constants.urgencies import UrgencyLevel
 from services.duplicate_detection.duplicate_service import apply_duplicate_result, detect
 from services.llm.exceptions import LLMProviderUnavailableError
+from services.llm.schemas import ExtractedFeatures, TriageResult
 from services.llm.triage_service import TriageService
 
 
@@ -185,6 +187,42 @@ class ReportCreatePipelineTests(TestCase):
         self.assertEqual(payload["possibleDuplicate"], False)
         self.assertEqual(payload["aiStatus"], "fallback")
         self.assertGreater(report.priority_score, 0)
+
+    def test_report_create_persists_llm_triage_output(self):
+        triage_result = TriageResult(
+            detected_language="en",
+            category=ReportCategory.FIRE,
+            urgency=UrgencyLevel.CRITICAL,
+            summary="A fire was reported near a shop.",
+            suggested_action="Notify fire service immediately.",
+            confidence=0.94,
+            features=ExtractedFeatures(people_trapped=True, landmark="near a shop"),
+        )
+
+        with patch("api.views.TriageService") as mocked_triage_service:
+            mocked_triage_service.return_value.analyze.return_value = triage_result
+            response = self.client.post(
+                "/api/v1/reports",
+                {
+                    "location": "Sylhet Bondor Bazar",
+                    "description": "There is a fire near a shop and people are trapped.",
+                    "language": "en",
+                },
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        payload = response.data["data"]
+        report = Report.objects.get(id=payload["id"])
+        self.assertEqual(report.category, ReportCategory.FIRE)
+        self.assertEqual(report.urgency, UrgencyLevel.CRITICAL)
+        self.assertEqual(report.summary, "A fire was reported near a shop.")
+        self.assertEqual(report.suggested_action, "Notify fire service immediately.")
+        self.assertEqual(report.confidence, 0.94)
+        self.assertEqual(report.features["people_trapped"], True)
+        self.assertEqual(payload["category"], ReportCategory.FIRE)
+        self.assertEqual(payload["urgency"], UrgencyLevel.CRITICAL)
+        mocked_triage_service.return_value.analyze.assert_called_once()
 
     def test_second_similar_report_is_marked_duplicate(self):
         first_response = self.client.post(
