@@ -1,3 +1,15 @@
-from .duplicate_service import detect
+from .duplicate_service import (
+    DuplicateDetectionResult,
+    DuplicateDetectionService,
+    apply_duplicate_result,
+    detect,
+    detect_report,
+)
 
-__all__ = ["detect"]
+__all__ = [
+    "DuplicateDetectionResult",
+    "DuplicateDetectionService",
+    "apply_duplicate_result",
+    "detect",
+    "detect_report",
+]
