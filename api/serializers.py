@@ -158,6 +158,44 @@ class ReportListSerializer(serializers.ModelSerializer):
         ]
 
 
+class ReportCreateResponseSerializer(serializers.ModelSerializer):
+    possibleDuplicate = serializers.BooleanField(source="possible_duplicate")
+    matchedReportId = serializers.SerializerMethodField()
+    duplicateCount = serializers.IntegerField(source="duplicate_count")
+    similarityScore = serializers.FloatField(source="similarity_score")
+    priorityScore = serializers.IntegerField(source="priority_score")
+    detectedLanguage = serializers.CharField(source="detected_language")
+    suggestedAction = serializers.CharField(source="suggested_action")
+    aiStatus = serializers.CharField(source="ai_status")
+    duplicateDetectionStatus = serializers.CharField(source="duplicate_detection_status")
+    duplicateDetectionMethod = serializers.CharField(source="duplicate_detection_method")
+
+    class Meta:
+        model = Report
+        fields = [
+            "id",
+            "category",
+            "urgency",
+            "summary",
+            "suggestedAction",
+            "confidence",
+            "features",
+            "detectedLanguage",
+            "aiStatus",
+            "possibleDuplicate",
+            "matchedReportId",
+            "duplicateCount",
+            "similarityScore",
+            "priorityScore",
+            "duplicateDetectionStatus",
+            "duplicateDetectionMethod",
+            "status",
+        ]
+
+    def get_matchedReportId(self, obj):
+        return str(obj.matched_report_id) if obj.matched_report_id else None
+
+
 class ReportDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Report

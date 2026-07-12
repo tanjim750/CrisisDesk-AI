@@ -6,6 +6,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from api.models import Report
 from core.constants.categories import ReportCategory
+from core.constants.statuses import ReportStatus
 from core.constants.urgencies import UrgencyLevel
 from services.duplicate_detection.duplicate_service import apply_duplicate_result, detect
 from services.llm.exceptions import LLMProviderUnavailableError
@@ -157,6 +158,119 @@ class ReportDeleteAuthTests(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertFalse(Report.objects.filter(id=self.report.id).exists())
+
+
+class ReportCreatePipelineTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+    def test_report_create_runs_fallback_triage_priority_and_duplicate_metadata(self):
+        response = self.client.post(
+            "/api/v1/reports",
+            {
+                "location": "Sylhet Bondor Bazar",
+                "description": "There is a fire near a shop.",
+                "language": "en",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        payload = response.data["data"]
+        report = Report.objects.get(id=payload["id"])
+
+        self.assertEqual(payload["category"], report.category)
+        self.assertEqual(payload["urgency"], report.urgency)
+        self.assertEqual(payload["priorityScore"], report.priority_score)
+        self.assertEqual(payload["possibleDuplicate"], False)
+        self.assertEqual(payload["aiStatus"], "fallback")
+        self.assertGreater(report.priority_score, 0)
+
+    def test_second_similar_report_is_marked_duplicate(self):
+        first_response = self.client.post(
+            "/api/v1/reports",
+            {
+                "location": "Sylhet Bondor Bazar",
+                "description": "There is a fire near a shop.",
+                "language": "en",
+            },
+            format="json",
+        )
+        second_response = self.client.post(
+            "/api/v1/reports",
+            {
+                "location": "Bondor Bazar, Sylhet",
+                "description": "There is a fire near a shop.",
+                "language": "en",
+            },
+            format="json",
+        )
+
+        self.assertEqual(first_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(second_response.status_code, status.HTTP_201_CREATED)
+        payload = second_response.data["data"]
+
+        self.assertTrue(payload["possibleDuplicate"])
+        self.assertIsNotNone(payload["matchedReportId"])
+        self.assertEqual(payload["duplicateCount"], 1)
+
+
+class ReportStatsSummaryTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        user_model = get_user_model()
+        self.manager = user_model.objects.create_user(
+            username="stats-manager",
+            email="stats@example.com",
+            password="secure-password",
+            is_staff=True,
+        )
+
+    def test_stats_summary_requires_manager_authentication(self):
+        response = self.client.get("/api/v1/reports/stats/summary")
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_stats_summary_returns_expected_aggregates(self):
+        Report.objects.create(
+            description="Fire report",
+            location="A",
+            category=ReportCategory.FIRE,
+            urgency=UrgencyLevel.CRITICAL,
+            status=ReportStatus.PENDING,
+        )
+        Report.objects.create(
+            description="Medical report",
+            location="B",
+            category=ReportCategory.MEDICAL,
+            urgency=UrgencyLevel.HIGH,
+            status=ReportStatus.RESOLVED,
+        )
+        Report.objects.create(
+            description="Utility report",
+            location="C",
+            category=ReportCategory.UTILITY,
+            urgency=UrgencyLevel.MEDIUM,
+            status=ReportStatus.PENDING,
+        )
+        token = RefreshToken.for_user(self.manager).access_token
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        response = self.client.get("/api/v1/reports/stats/summary")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        payload = response.data["data"]
+        self.assertEqual(payload["totalReports"], 3)
+        self.assertEqual(payload["criticalReports"], 1)
+        self.assertEqual(payload["pendingReports"], 2)
+        self.assertEqual(payload["resolvedReports"], 1)
+        self.assertEqual(payload["categoryBreakdown"]["fire"], 1)
+        self.assertEqual(payload["categoryBreakdown"]["medical"], 1)
+        self.assertEqual(payload["categoryBreakdown"]["utility"], 1)
+        self.assertEqual(payload["urgencyBreakdown"]["low"], 0)
+        self.assertEqual(payload["urgencyBreakdown"]["medium"], 1)
+        self.assertEqual(payload["urgencyBreakdown"]["high"], 1)
+        self.assertEqual(payload["urgencyBreakdown"]["critical"], 1)
 
 
 class FakeLLMClient:

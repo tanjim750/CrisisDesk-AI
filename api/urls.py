@@ -7,6 +7,7 @@ from api.views import (
     ManagerTokenRefreshView,
     ReportListCreateView,
     ReportDetailDeleteView,
+    ReportStatsSummaryView,
     ReportStatusUpdateView,
 )
 
@@ -19,6 +20,7 @@ urlpatterns = [
     
     # Report endpoints
     path("reports", ReportListCreateView.as_view(), name="report-list-create"),
+    path("reports/stats/summary", ReportStatsSummaryView.as_view(), name="report-stats-summary"),
     path("reports/<uuid:report_id>", ReportDetailDeleteView.as_view(), name="report-detail-delete"),
     path("reports/<uuid:report_id>/status", ReportStatusUpdateView.as_view(), name="report-status-update"),
 ]

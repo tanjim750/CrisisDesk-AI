@@ -1,3 +1,5 @@
+from django.db import transaction
+from django.db.models import Count
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
@@ -11,14 +13,37 @@ from api.serializers import (
     ManagerProfileSerializer,
     ManagerTokenRefreshSerializer,
     ReportCreateSerializer,
+    ReportCreateResponseSerializer,
     ReportListSerializer,
     ReportDetailSerializer,
     ReportSanitizedSerializer,
     ReportStatusUpdateSerializer,
 )
+from core.constants.statuses import ReportStatus
+from core.constants.urgencies import UrgencyLevel
 from core.permissions import IsManager
 from core.responses.codes import ResponseCode
 from core.responses.renderer import success_response, error_response
+from services.duplicate_detection import apply_duplicate_result, detect
+from services.llm import TriageService
+from services.priority import calculate_priority
+
+
+def _refresh_duplicate_group_priorities(duplicate_group_key):
+    if not duplicate_group_key:
+        return
+
+    reports = Report.objects.filter(duplicate_group_key=duplicate_group_key)
+    for report in reports:
+        priority_score = calculate_priority(
+            urgency=report.urgency,
+            confidence=report.confidence,
+            duplicate_count=report.duplicate_count,
+            created_at=report.created_at,
+        )
+        if report.priority_score != priority_score:
+            report.priority_score = priority_score
+            report.save(update_fields=["priority_score", "updated_at"])
 
 
 class ManagerLoginView(APIView):
@@ -166,28 +191,47 @@ class ReportListCreateView(APIView):
         serializer = ReportCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        # Create report with default values (AI processing and duplicate detection to be implemented)
-        report = Report.objects.create(
-            reporter_name=serializer.validated_data.get("name", ""),
-            reporter_contact=serializer.validated_data.get("contact", ""),
+        triage_result = TriageService().analyze(
             description=serializer.validated_data["description"],
             location=serializer.validated_data["location"],
             submitted_language=serializer.validated_data["language"],
-            category="other",  # Default until AI processing
-            urgency="medium",  # Default until AI processing
-            confidence=0.0,
-            priority_score=50,  # Default priority
         )
 
-        # Return response with duplicate metadata (placeholder for now)
-        response_data = {
-            "id": str(report.id),
-            "possibleDuplicate": report.possible_duplicate,
-            "matchedReportId": str(report.matched_report.id) if report.matched_report else None,
-            "duplicateCount": report.duplicate_count,
-            "similarityScore": report.similarity_score,
-            "priorityScore": report.priority_score,
-        }
+        with transaction.atomic():
+            report = Report.objects.create(
+                reporter_name=serializer.validated_data.get("name", ""),
+                reporter_contact=serializer.validated_data.get("contact", ""),
+                description=serializer.validated_data["description"],
+                location=serializer.validated_data["location"],
+                submitted_language=serializer.validated_data["language"],
+                detected_language=triage_result.detected_language,
+                category=triage_result.category,
+                urgency=triage_result.urgency,
+                summary=triage_result.summary,
+                suggested_action=triage_result.suggested_action,
+                confidence=triage_result.confidence,
+                features=triage_result.features.to_dict(),
+                ai_status=triage_result.ai_status,
+            )
+            duplicate_result = detect(
+                description=report.description,
+                location=report.location,
+                category=report.category,
+                report_model=Report,
+                created_at=report.created_at,
+                exclude_report_id=report.pk,
+            )
+            apply_duplicate_result(report, duplicate_result)
+            report.priority_score = calculate_priority(
+                urgency=report.urgency,
+                confidence=report.confidence,
+                duplicate_count=report.duplicate_count,
+                created_at=report.created_at,
+            )
+            report.save(update_fields=["priority_score", "updated_at"])
+            _refresh_duplicate_group_priorities(report.duplicate_group_key)
+
+        report.refresh_from_db()
 
         code = ResponseCode.REPORT_CREATED_WITH_DUPLICATE_MATCH if report.possible_duplicate else ResponseCode.REPORT_CREATED
 
@@ -195,7 +239,7 @@ class ReportListCreateView(APIView):
             request=request,
             code=code,
             status_code=status.HTTP_201_CREATED,
-            data=response_data,
+            data=ReportCreateResponseSerializer(report).data,
         )
 
 
@@ -278,3 +322,47 @@ class ReportStatusUpdateView(APIView):
             data=ReportDetailSerializer(report).data,
             **{"previous_status": previous_status, "current_status": new_status},
         )
+
+
+class ReportStatsSummaryView(APIView):
+    permission_classes = [IsAuthenticated, IsManager]
+
+    def get(self, request):
+        category_breakdown = _build_count_breakdown("category")
+        urgency_breakdown = _build_count_breakdown(
+            "urgency",
+            allowed_values=[choice.value for choice in UrgencyLevel],
+        )
+
+        data = {
+            "totalReports": Report.objects.count(),
+            "criticalReports": Report.objects.filter(urgency=UrgencyLevel.CRITICAL).count(),
+            "pendingReports": Report.objects.filter(status=ReportStatus.PENDING).count(),
+            "resolvedReports": Report.objects.filter(status=ReportStatus.RESOLVED).count(),
+            "categoryBreakdown": category_breakdown,
+            "urgencyBreakdown": urgency_breakdown,
+        }
+
+        return success_response(
+            request=request,
+            code=ResponseCode.REPORT_STATS_RETRIEVED,
+            status_code=status.HTTP_200_OK,
+            data=data,
+        )
+
+
+def _build_count_breakdown(field_name, *, allowed_values=None):
+    rows = Report.objects.values(field_name).annotate(count=Count("id")).order_by(field_name)
+    counts = {
+        row[field_name]: row["count"]
+        for row in rows
+        if row[field_name]
+    }
+
+    if allowed_values is None:
+        return counts
+
+    return {
+        value: counts.get(value, 0)
+        for value in allowed_values
+    }

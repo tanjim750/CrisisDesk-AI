@@ -286,7 +286,7 @@ Timeline events must be ordered by timestamp
 Internal manager notes should be hidden from general users
 
 Analytics Endpoint
-GET /api/v1/analytics/summary
+GET /api/v1/reports/stats/summary
 Scope: Manager only
 Responsibility: Return aggregated system statistics.
 Optional filters:
