@@ -99,7 +99,6 @@ class ManagerMeView(APIView):
 
 class ReportListCreateView(APIView):
     permission_classes = [AllowAny]
-    authentication_classes = []
 
     def get(self, request):
         queryset = Report.objects.all()
@@ -202,7 +201,12 @@ class ReportListCreateView(APIView):
 
 class ReportDetailDeleteView(APIView):
     permission_classes = [AllowAny]
-    authentication_classes = []
+
+    def get_permissions(self):
+        if self.request.method == "DELETE":
+            return [IsAuthenticated(), IsManager()]
+
+        return [AllowAny()]
 
     def get_object(self, report_id):
         try:
@@ -227,17 +231,6 @@ class ReportDetailDeleteView(APIView):
         )
 
     def delete(self, request, report_id):
-        print("Request user:", request.user)  # Debugging line
-        print("Is authenticated:", request.user.is_authenticated)  # Debugging line
-        print("Is staff:", request.user.is_staff)  # Debugging line
-        # Check if user is authenticated and is manager
-        if not (request.user and request.user.is_authenticated and request.user.is_staff):
-            return error_response(
-                request=request,
-                code=ResponseCode.PERMISSION_DENIED,
-                status_code=status.HTTP_403_FORBIDDEN,
-            )
-
         report = self.get_object(report_id)
         report.delete()
 

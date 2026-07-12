@@ -1,4 +1,8 @@
+from django.contrib.auth import get_user_model
 from django.test import TestCase
+from rest_framework import status
+from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from api.models import Report
 from core.constants.categories import ReportCategory
@@ -121,6 +125,38 @@ class LLMServiceTests(TestCase):
         self.assertTrue(result.requires_manual_review)
         self.assertEqual(result.category, ReportCategory.OTHER)
         self.assertEqual(result.urgency, UrgencyLevel.MEDIUM)
+
+
+class ReportDeleteAuthTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.report = Report.objects.create(
+            description="Road is blocked near the market.",
+            location="Bondor Bazar",
+            category=ReportCategory.PUBLIC_SERVICE,
+        )
+
+    def test_delete_report_without_token_is_rejected(self):
+        response = self.client.delete(f"/api/v1/reports/{self.report.id}")
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertTrue(Report.objects.filter(id=self.report.id).exists())
+
+    def test_delete_report_with_manager_token_deletes_report(self):
+        user_model = get_user_model()
+        manager = user_model.objects.create_user(
+            username="manager",
+            email="manager@example.com",
+            password="secure-password",
+            is_staff=True,
+        )
+        access_token = RefreshToken.for_user(manager).access_token
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {access_token}")
+
+        response = self.client.delete(f"/api/v1/reports/{self.report.id}")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(Report.objects.filter(id=self.report.id).exists())
 
 
 class FakeLLMClient:
