@@ -2,16 +2,23 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
+from django.http import Http404
 
+from api.models import Report
 from api.serializers import (
     ManagerLoginSerializer,
     ManagerLogoutSerializer,
     ManagerProfileSerializer,
     ManagerTokenRefreshSerializer,
+    ReportCreateSerializer,
+    ReportListSerializer,
+    ReportDetailSerializer,
+    ReportSanitizedSerializer,
+    ReportStatusUpdateSerializer,
 )
 from core.permissions import IsManager
 from core.responses.codes import ResponseCode
-from core.responses.renderer import success_response
+from core.responses.renderer import success_response, error_response
 
 
 class ManagerLoginView(APIView):
@@ -87,4 +94,194 @@ class ManagerMeView(APIView):
             code=ResponseCode.PROFILE_RETRIEVED,
             status_code=status.HTTP_200_OK,
             data=ManagerProfileSerializer(request.user).data,
+        )
+
+
+class ReportListCreateView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request):
+        queryset = Report.objects.all()
+
+        # Apply filters
+        category = request.query_params.get("category")
+        urgency = request.query_params.get("urgency")
+        status_filter = request.query_params.get("status")
+        search = request.query_params.get("search")
+        date_from = request.query_params.get("date_from")
+        date_to = request.query_params.get("date_to")
+        possible_duplicate = request.query_params.get("possible_duplicate")
+
+        if category:
+            queryset = queryset.filter(category=category)
+        if urgency:
+            queryset = queryset.filter(urgency=urgency)
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        if search:
+            queryset = queryset.filter(description__icontains=search)
+        if date_from:
+            queryset = queryset.filter(created_at__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(created_at__lte=date_to)
+        if possible_duplicate is not None:
+            if possible_duplicate.lower() == "true":
+                queryset = queryset.filter(possible_duplicate=True)
+            elif possible_duplicate.lower() == "false":
+                queryset = queryset.filter(possible_duplicate=False)
+
+        # Apply ordering (default: -priority_score, created_at)
+        ordering = request.query_params.get("ordering", "-priority_score,created_at")
+        queryset = queryset.order_by(*ordering.split(","))
+
+        # Pagination
+        page = int(request.query_params.get("page", 1))
+        page_size = int(request.query_params.get("page_size", 20))
+
+        start = (page - 1) * page_size
+        end = start + page_size
+        reports = queryset[start:end]
+        total_count = queryset.count()
+
+        # Choose serializer based on user role
+        if request.user and request.user.is_authenticated and request.user.is_staff:
+            serializer = ReportListSerializer(reports, many=True)
+        else:
+            serializer = ReportListSerializer(reports, many=True)
+
+        return success_response(
+            request=request,
+            code=ResponseCode.REPORTS_RETRIEVED,
+            status_code=status.HTTP_200_OK,
+            data=serializer.data,
+            meta={
+                "count": total_count,
+                "page": page,
+                "pageSize": page_size,
+            },
+            **{"count": total_count},
+        )
+
+    def post(self, request):
+        serializer = ReportCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # Create report with default values (AI processing and duplicate detection to be implemented)
+        report = Report.objects.create(
+            reporter_name=serializer.validated_data.get("name", ""),
+            reporter_contact=serializer.validated_data.get("contact", ""),
+            description=serializer.validated_data["description"],
+            location=serializer.validated_data["location"],
+            submitted_language=serializer.validated_data["language"],
+            category="other",  # Default until AI processing
+            urgency="medium",  # Default until AI processing
+            confidence=0.0,
+            priority_score=50,  # Default priority
+        )
+
+        # Return response with duplicate metadata (placeholder for now)
+        response_data = {
+            "id": str(report.id),
+            "possibleDuplicate": report.possible_duplicate,
+            "matchedReportId": str(report.matched_report.id) if report.matched_report else None,
+            "duplicateCount": report.duplicate_count,
+            "similarityScore": report.similarity_score,
+            "priorityScore": report.priority_score,
+        }
+
+        code = ResponseCode.REPORT_CREATED_WITH_DUPLICATE_MATCH if report.possible_duplicate else ResponseCode.REPORT_CREATED
+
+        return success_response(
+            request=request,
+            code=code,
+            status_code=status.HTTP_201_CREATED,
+            data=response_data,
+        )
+
+
+class ReportDetailDeleteView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get_object(self, report_id):
+        try:
+            return Report.objects.get(id=report_id)
+        except (Report.DoesNotExist, ValueError):
+            raise Http404
+
+    def get(self, request, report_id):
+        report = self.get_object(report_id)
+
+        # Choose serializer based on user role
+        if request.user and request.user.is_authenticated and request.user.is_staff:
+            serializer = ReportDetailSerializer(report)
+        else:
+            serializer = ReportSanitizedSerializer(report)
+
+        return success_response(
+            request=request,
+            code=ResponseCode.REPORT_RETRIEVED,
+            status_code=status.HTTP_200_OK,
+            data=serializer.data,
+        )
+
+    def delete(self, request, report_id):
+        print("Request user:", request.user)  # Debugging line
+        print("Is authenticated:", request.user.is_authenticated)  # Debugging line
+        print("Is staff:", request.user.is_staff)  # Debugging line
+        # Check if user is authenticated and is manager
+        if not (request.user and request.user.is_authenticated and request.user.is_staff):
+            return error_response(
+                request=request,
+                code=ResponseCode.PERMISSION_DENIED,
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
+
+        report = self.get_object(report_id)
+        report.delete()
+
+        return success_response(
+            request=request,
+            code=ResponseCode.REPORT_DELETED,
+            status_code=status.HTTP_200_OK,
+            data={},
+        )
+
+
+class ReportStatusUpdateView(APIView):
+    permission_classes = [IsAuthenticated, IsManager]
+
+    def get_object(self, report_id):
+        try:
+            return Report.objects.get(id=report_id)
+        except (Report.DoesNotExist, ValueError):
+            raise Http404
+
+    def patch(self, request, report_id):
+        report = self.get_object(report_id)
+        serializer = ReportStatusUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        previous_status = report.status
+        new_status = serializer.validated_data["status"]
+
+        # Basic status transition validation
+        if previous_status in ["resolved", "rejected"] and new_status not in ["resolved", "rejected"]:
+            return error_response(
+                request=request,
+                code=ResponseCode.INVALID_STATUS_TRANSITION,
+                status_code=status.HTTP_400_BAD_REQUEST,
+                **{"previous_status": previous_status, "current_status": new_status},
+            )
+
+        report.status = new_status
+        report.save()
+
+        return success_response(
+            request=request,
+            code=ResponseCode.REPORT_STATUS_UPDATED,
+            status_code=status.HTTP_200_OK,
+            data=ReportDetailSerializer(report).data,
+            **{"previous_status": previous_status, "current_status": new_status},
         )
