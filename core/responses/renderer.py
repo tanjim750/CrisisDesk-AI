@@ -11,18 +11,44 @@ def resolve_response_language(request=None) -> str:
     if request is None:
         return DEFAULT_RESPONSE_LANGUAGE
 
+    header_language = resolve_accept_language_header(request)
+    if header_language:
+        return header_language
+
     query_params = getattr(request, "query_params", {})
     query_language = query_params.get("lang") if query_params else None
     if query_language in SUPPORTED_RESPONSE_LANGUAGES:
         return query_language
 
+    return DEFAULT_RESPONSE_LANGUAGE
+
+
+def resolve_accept_language_header(request) -> str | None:
     headers = getattr(request, "headers", {})
     accept_language = headers.get("Accept-Language", "") if headers else ""
-    header_language = accept_language.split(",")[0].split("-")[0].strip().lower()
-    if header_language in SUPPORTED_RESPONSE_LANGUAGES:
-        return header_language
+    language_preferences = []
 
-    return DEFAULT_RESPONSE_LANGUAGE
+    for index, language_range in enumerate(accept_language.split(",")):
+        language_parts = language_range.strip().split(";")
+        language = language_parts[0].split("-")[0].strip().lower()
+        quality = 1.0
+
+        for parameter in language_parts[1:]:
+            key, _, value = parameter.strip().partition("=")
+            if key == "q":
+                try:
+                    quality = float(value)
+                except ValueError:
+                    quality = 0.0
+
+        if language in SUPPORTED_RESPONSE_LANGUAGES:
+            language_preferences.append((quality, index, language))
+
+    if language_preferences:
+        language_preferences.sort(key=lambda item: (-item[0], item[1]))
+        return language_preferences[0][2]
+
+    return None
 
 
 def render_response(*, success, code, message, status_code, data=None, errors=None, meta=None):
