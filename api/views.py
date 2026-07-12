@@ -1,5 +1,6 @@
 from django.db import transaction
 from django.db.models import Count
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.throttling import ScopedRateThrottle
@@ -9,15 +10,19 @@ from django.http import Http404
 
 from api.models import Report
 from api.serializers import (
+    EmptyResponseSerializer,
     ManagerLoginSerializer,
+    ManagerLoginResponseSerializer,
     ManagerLogoutSerializer,
     ManagerProfileSerializer,
     ManagerTokenRefreshSerializer,
+    ManagerTokenRefreshResponseSerializer,
     ReportCreateSerializer,
     ReportCreateResponseSerializer,
     ReportListSerializer,
     ReportDetailSerializer,
     ReportSanitizedSerializer,
+    ReportStatsSummarySerializer,
     ReportStatusUpdateSerializer,
 )
 from core.constants.statuses import ReportStatus
@@ -66,6 +71,11 @@ class ManagerLoginView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "auth_login"
 
+    @extend_schema(
+        operation_id="auth_login",
+        request=ManagerLoginSerializer,
+        responses={200: ManagerLoginResponseSerializer},
+    )
     def post(self, request):
         serializer = ManagerLoginSerializer(
             data=request.data,
@@ -96,6 +106,11 @@ class ManagerTokenRefreshView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "auth_refresh"
 
+    @extend_schema(
+        operation_id="auth_refresh",
+        request=ManagerTokenRefreshSerializer,
+        responses={200: ManagerTokenRefreshResponseSerializer},
+    )
     def post(self, request):
         serializer = ManagerTokenRefreshSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -114,6 +129,11 @@ class ManagerLogoutView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "auth_logout"
 
+    @extend_schema(
+        operation_id="auth_logout",
+        request=ManagerLogoutSerializer,
+        responses={200: EmptyResponseSerializer},
+    )
     def post(self, request):
         serializer = ManagerLogoutSerializer(
             data=request.data,
@@ -135,6 +155,10 @@ class ManagerMeView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "auth_me"
 
+    @extend_schema(
+        operation_id="auth_me",
+        responses={200: ManagerProfileSerializer},
+    )
     def get(self, request):
         return success_response(
             request=request,
@@ -151,6 +175,10 @@ class ReportListCreateView(MethodScopedThrottleMixin, APIView):
         "POST": "reports_create",
     }
 
+    @extend_schema(
+        operation_id="reports_list",
+        responses={200: ReportListSerializer(many=True)},
+    )
     def get(self, request):
         queryset = Report.objects.all()
 
@@ -213,6 +241,11 @@ class ReportListCreateView(MethodScopedThrottleMixin, APIView):
             **{"count": total_count},
         )
 
+    @extend_schema(
+        operation_id="reports_create",
+        request=ReportCreateSerializer,
+        responses={201: ReportCreateResponseSerializer},
+    )
     def post(self, request):
         serializer = ReportCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -288,6 +321,10 @@ class ReportDetailDeleteView(MethodScopedThrottleMixin, APIView):
         except (Report.DoesNotExist, ValueError):
             raise Http404
 
+    @extend_schema(
+        operation_id="reports_retrieve",
+        responses={200: ReportDetailSerializer},
+    )
     def get(self, request, report_id):
         report = self.get_object(report_id)
 
@@ -304,6 +341,10 @@ class ReportDetailDeleteView(MethodScopedThrottleMixin, APIView):
             data=serializer.data,
         )
 
+    @extend_schema(
+        operation_id="reports_delete",
+        responses={200: EmptyResponseSerializer},
+    )
     def delete(self, request, report_id):
         report = self.get_object(report_id)
         report.delete()
@@ -327,6 +368,11 @@ class ReportStatusUpdateView(APIView):
         except (Report.DoesNotExist, ValueError):
             raise Http404
 
+    @extend_schema(
+        operation_id="reports_status_update",
+        request=ReportStatusUpdateSerializer,
+        responses={200: ReportDetailSerializer},
+    )
     def patch(self, request, report_id):
         report = self.get_object(report_id)
         serializer = ReportStatusUpdateSerializer(data=request.data)
@@ -361,6 +407,10 @@ class ReportStatsSummaryView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "reports_stats"
 
+    @extend_schema(
+        operation_id="reports_stats_summary",
+        responses={200: ReportStatsSummarySerializer},
+    )
     def get(self, request):
         category_breakdown = _build_count_breakdown("category")
         urgency_breakdown = _build_count_breakdown(

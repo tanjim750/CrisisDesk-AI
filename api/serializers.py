@@ -115,6 +115,20 @@ class ManagerProfileSerializer(serializers.Serializer):
     is_staff = serializers.BooleanField()
 
 
+class ManagerLoginResponseSerializer(serializers.Serializer):
+    access = serializers.CharField()
+    refresh = serializers.CharField()
+    user = ManagerProfileSerializer()
+
+
+class ManagerTokenRefreshResponseSerializer(serializers.Serializer):
+    access = serializers.CharField()
+
+
+class EmptyResponseSerializer(serializers.Serializer):
+    pass
+
+
 class ReportCreateSerializer(serializers.Serializer):
     location = serializers.CharField(required=True, max_length=500)
     description = serializers.CharField(required=True)
@@ -192,7 +206,7 @@ class ReportCreateResponseSerializer(serializers.ModelSerializer):
             "status",
         ]
 
-    def get_matchedReportId(self, obj):
+    def get_matchedReportId(self, obj) -> str | None:
         return str(obj.matched_report_id) if obj.matched_report_id else None
 
 
@@ -271,3 +285,12 @@ class ReportBulkStatusUpdateSerializer(serializers.Serializer):
             raise serializers.ValidationError("At least one report ID is required.")
         # Remove duplicates
         return list(set(value))
+
+
+class ReportStatsSummarySerializer(serializers.Serializer):
+    totalReports = serializers.IntegerField()
+    criticalReports = serializers.IntegerField()
+    pendingReports = serializers.IntegerField()
+    resolvedReports = serializers.IntegerField()
+    categoryBreakdown = serializers.DictField(child=serializers.IntegerField())
+    urgencyBreakdown = serializers.DictField(child=serializers.IntegerField())
