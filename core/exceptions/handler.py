@@ -67,6 +67,14 @@ def custom_exception_handler(exc, context):
             errors=drf_response.data,
         )
 
+    if exceptions is not None and isinstance(exc, exceptions.AuthenticationFailed):
+        return error_response(
+            request=request,
+            code=ResponseCode.INVALID_CREDENTIALS,
+            status_code=drf_response.status_code,
+            errors=drf_response.data,
+        )
+
     if exceptions is not None and isinstance(exc, exceptions.PermissionDenied):
         return error_response(
             request=request,
