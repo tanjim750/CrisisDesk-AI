@@ -17,23 +17,35 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-try:
-    from dotenv import load_dotenv
-except ImportError:
-    load_dotenv = None
+ENV_FILE_PATH = BASE_DIR / '.env'
 
-if load_dotenv is not None:
-    load_dotenv(BASE_DIR / '.env')
-else:
-    env_path = BASE_DIR / '.env'
-    if env_path.exists():
-        for line in env_path.read_text().splitlines():
-            line = line.strip()
-            if not line or line.startswith('#') or '=' not in line:
-                continue
 
-            key, value = line.split('=', 1)
-            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+def load_environment_file(path):
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        load_dotenv = None
+
+    if load_dotenv is not None:
+        return load_dotenv(path)
+
+    if not path.exists():
+        return False
+
+    loaded = False
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+
+        key, value = line.split('=', 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+        loaded = True
+
+    return loaded
+
+
+ENV_FILE_LOADED = load_environment_file(ENV_FILE_PATH)
 
 
 # Quick-start development settings - unsuitable for production
