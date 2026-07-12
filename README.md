@@ -68,6 +68,31 @@ Stop the stack:
 docker compose down
 ```
 
+## Unit Tests
+
+Unit tests live in `api/tests.py` and run with Django's built-in test runner.
+
+Run the full API test suite:
+
+```bash
+docker compose exec web python manage.py test api
+```
+
+Run one specific test class or test method:
+
+```bash
+docker compose exec web python manage.py test api.tests.ReportCreatePipelineTests
+docker compose exec web python manage.py test api.tests.ReportCreatePipelineTests.test_report_create_persists_llm_triage_output
+```
+
+Current test coverage focuses on:
+
+- Manager authentication flows.
+- Report creation and LLM triage persistence.
+- Duplicate detection behavior.
+- Report filtering, retrieval, status updates, and stats summary.
+- Rate limiting and standardized response rendering.
+
 ## Request Headers
 
 Use JSON for all request bodies:
