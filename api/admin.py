@@ -21,10 +21,7 @@ class ReportAdmin(admin.ModelAdmin):
         "possible_duplicate",
         "ai_status",
         "duplicate_detection_status",
-<<<<<<< HEAD
-=======
         "duplicate_detection_method",
->>>>>>> origin
     )
     search_fields = ("description", "location", "reporter_name", "reporter_contact")
     readonly_fields = ("id", "created_at", "updated_at", "normalized_location")

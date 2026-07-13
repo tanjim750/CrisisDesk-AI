@@ -11,5 +11,3 @@ htmlcov/
 .coverage
 staticfiles/
 media/
-docs/*
-!docs/api-endpoints.md

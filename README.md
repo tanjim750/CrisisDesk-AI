@@ -142,23 +142,6 @@ The API response envelope is standardized:
 
 Manager login uses the default Django `User` model. The account must be active and staff-enabled.
 
-## Test Credentials
-
-Use placeholder credentials in public docs and demos. Do not commit real passwords to Git.
-
-```json
-{
-  "email": "test-manager@example.com",
-  "password": "change-me"
-}
-```
-
-Create or update the local test manager with your real password on the server:
-
-```bash
-docker compose exec web python manage.py createsuperuser
-```
-
 ## Endpoints
 
 All endpoints are prefixed with `/api/v1`.
