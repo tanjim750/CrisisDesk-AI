@@ -1,6 +1,0 @@
-openapi: 3.0.3
-info:
-  title: CrisisDesk AI API
-  version: 0.1.0
-  description: Placeholder schema. Regenerate with drf-spectacular after endpoints are implemented.
-paths: {}

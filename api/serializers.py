@@ -4,6 +4,12 @@ from rest_framework import exceptions, serializers
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from api.models import Report
+from core.constants.categories import ReportCategory
+from core.constants.languages import SupportedLanguage
+from core.constants.statuses import ReportStatus
+from core.constants.urgencies import UrgencyLevel
+
 
 class ManagerLoginSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
@@ -107,3 +113,184 @@ class ManagerProfileSerializer(serializers.Serializer):
     first_name = serializers.CharField()
     last_name = serializers.CharField()
     is_staff = serializers.BooleanField()
+
+
+class ManagerLoginResponseSerializer(serializers.Serializer):
+    access = serializers.CharField()
+    refresh = serializers.CharField()
+    user = ManagerProfileSerializer()
+
+
+class ManagerTokenRefreshResponseSerializer(serializers.Serializer):
+    access = serializers.CharField()
+
+
+class EmptyResponseSerializer(serializers.Serializer):
+    pass
+
+
+class ReportCreateSerializer(serializers.Serializer):
+    location = serializers.CharField(required=True, max_length=500)
+    description = serializers.CharField(required=True)
+    language = serializers.ChoiceField(
+        choices=SupportedLanguage.choices,
+        default=SupportedLanguage.UNKNOWN,
+    )
+    name = serializers.CharField(required=False, max_length=255, allow_blank=True)
+    contact = serializers.CharField(required=False, max_length=50, allow_blank=True)
+
+    def validate_description(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("Description cannot be empty.")
+        return value.strip()
+
+    def validate_location(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("Location cannot be empty.")
+        return value.strip()
+
+    def validate_contact(self, value):
+        if value and not value.strip():
+            raise serializers.ValidationError("Contact cannot be empty if provided.")
+        return value.strip() if value else ""
+
+
+class ReportListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Report
+        fields = [
+            "id",
+            "category",
+            "urgency",
+            "status",
+            "summary",
+            "priority_score",
+            "possible_duplicate",
+            "duplicate_count",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class ReportCreateResponseSerializer(serializers.ModelSerializer):
+    possibleDuplicate = serializers.BooleanField(source="possible_duplicate")
+    matchedReportId = serializers.SerializerMethodField()
+    duplicateCount = serializers.IntegerField(source="duplicate_count")
+    similarityScore = serializers.FloatField(source="similarity_score")
+    priorityScore = serializers.IntegerField(source="priority_score")
+    detectedLanguage = serializers.CharField(source="detected_language")
+    suggestedAction = serializers.CharField(source="suggested_action")
+    aiStatus = serializers.CharField(source="ai_status")
+    duplicateDetectionStatus = serializers.CharField(source="duplicate_detection_status")
+    duplicateDetectionMethod = serializers.CharField(source="duplicate_detection_method")
+
+    class Meta:
+        model = Report
+        fields = [
+            "id",
+            "category",
+            "urgency",
+            "summary",
+            "suggestedAction",
+            "confidence",
+            "features",
+            "detectedLanguage",
+            "aiStatus",
+            "possibleDuplicate",
+            "matchedReportId",
+            "duplicateCount",
+            "similarityScore",
+            "priorityScore",
+            "duplicateDetectionStatus",
+            "duplicateDetectionMethod",
+            "status",
+        ]
+
+    def get_matchedReportId(self, obj) -> str | None:
+        return str(obj.matched_report_id) if obj.matched_report_id else None
+
+
+class ReportDetailSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Report
+        fields = [
+            "id",
+            "reporter_name",
+            "reporter_contact",
+            "description",
+            "location",
+            "submitted_language",
+            "detected_language",
+            "category",
+            "urgency",
+            "summary",
+            "suggested_action",
+            "confidence",
+            "features",
+            "ai_status",
+            "possible_duplicate",
+            "matched_report",
+            "similarity_score",
+            "duplicate_count",
+            "duplicate_group_key",
+            "duplicate_detection_status",
+            "priority_score",
+            "status",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class ReportSanitizedSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Report
+        fields = [
+            "id",
+            "description",
+            "location",
+            "submitted_language",
+            "detected_language",
+            "category",
+            "urgency",
+            "summary",
+            "suggested_action",
+            "confidence",
+            "possible_duplicate",
+            "similarity_score",
+            "duplicate_count",
+            "priority_score",
+            "status",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class ReportStatusUpdateSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=ReportStatus.choices, required=True)
+
+    def validate_status(self, value):
+        return value
+
+
+class ReportBulkStatusUpdateSerializer(serializers.Serializer):
+    report_ids = serializers.ListField(
+        child=serializers.CharField(),
+        required=True,
+        allow_empty=False,
+    )
+    status = serializers.ChoiceField(choices=ReportStatus.choices, required=True)
+
+    def validate_report_ids(self, value):
+        if not value:
+            raise serializers.ValidationError("At least one report ID is required.")
+        # Remove duplicates
+        return list(set(value))
+
+
+class ReportStatsSummarySerializer(serializers.Serializer):
+    totalReports = serializers.IntegerField()
+    criticalReports = serializers.IntegerField()
+    pendingReports = serializers.IntegerField()
+    resolvedReports = serializers.IntegerField()
+    categoryBreakdown = serializers.DictField(child=serializers.IntegerField())
+    urgencyBreakdown = serializers.DictField(child=serializers.IntegerField())

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>CrisisDesk AI Documentation</title>
+
+    <link
+        rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.8.1/github-markdown-dark.min.css"
+    >
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background-color: #0d1117;
+            color: #c9d1d9;
+            font-family:
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                Helvetica,
+                Arial,
+                sans-serif;
+        }
+
+        .page-wrapper {
+            width: 100%;
+            padding: 32px 16px;
+        }
+
+        .markdown-body {
+            width: 100%;
+            max-width: 980px;
+            min-height: calc(100vh - 64px);
+            margin: 0 auto;
+            padding: 45px;
+            background-color: #0d1117;
+        }
+
+        .loading,
+        .error-message {
+            max-width: 980px;
+            margin: 80px auto;
+            padding: 24px;
+            text-align: center;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            background-color: #161b22;
+        }
+
+        .loading {
+            color: #8b949e;
+        }
+
+        .error-message {
+            color: #ff7b72;
+        }
+
+        .markdown-body pre {
+            overflow-x: auto;
+        }
+
+        .markdown-body img {
+            max-width: 100%;
+            height: auto;
+        }
+
+        @media (max-width: 767px) {
+            .page-wrapper {
+                padding: 0;
+            }
+
+            .markdown-body {
+                min-height: 100vh;
+                padding: 24px 16px;
+            }
+
+            .loading,
+            .error-message {
+                margin: 40px 16px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="page-wrapper">
+        <article id="content" class="markdown-body">
+            <div class="loading">Loading documentation...</div>
+        </article>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <script>
+        const README_URL =
+            "https://raw.githubusercontent.com/tanjim750/CrisisDesk-AI/main/README.md";
+
+        const contentElement = document.getElementById("content");
+
+        async function loadReadme() {
+            try {
+                const response = await fetch(README_URL, {
+                    cache: "no-store"
+                });
+
+                if (!response.ok) {
+                    throw new Error(
+                        `Failed to load README. Status: ${response.status}`
+                    );
+                }
+
+                const markdown = await response.text();
+
+                marked.setOptions({
+                    gfm: true,
+                    breaks: false
+                });
+
+                contentElement.innerHTML = marked.parse(markdown);
+
+                // Replace relative links in the loaded README
+                replaceRelativeLinks();
+
+            } catch (error) {
+                console.error(error);
+
+                contentElement.innerHTML = `
+                    <div class="error-message">
+                        <h2>Unable to load documentation</h2>
+                        <p>${escapeHtml(error.message)}</p>
+                    </div>
+                `;
+            }
+        }
+
+        function escapeHtml(value) {
+            return String(value)
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("'", "&#039;");
+        }
+
+        loadReadme();
+
+        function replaceRelativeLinks() {
+            const links = contentElement.querySelectorAll("a");
+            
+            links.forEach(link => {
+                const href = link.getAttribute("href");
+                if (href && href.toString().includes("api-endpoints.md")) {
+                    link.setAttribute(
+                        "href",
+                        "/api-endpoints"
+                    );
+                    link.setAttribute("target", "_self");
+                    link.textContent = "API Endpoints";
+                }
+            });
+        }
+
+        
+    </script>
+</body>
+</html>

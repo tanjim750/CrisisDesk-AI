@@ -1,285 +1,126 @@
 # CrisisDesk AI
 
-CrisisDesk AI is a backend-only emergency and public-service report triage API built with Django REST Framework. It receives unstructured citizen reports, classifies them with Gemini, detects similar reports using multilingual sentence embeddings, assigns urgency and priority, stores all submissions independently, and provides management APIs for review and analytics.
+CrisisDesk AI is a backend API for collecting emergency/public-service reports, triaging them with an LLM, detecting likely duplicate incidents, ranking priority, and giving managers a clean review workflow.
 
-## Core Capabilities
+## Technology & Framework References
 
-- Submit emergency and public-service reports
-- AI-based category and urgency classification
-- AI-generated summary and suggested action
-- Bangla and English report support
-- Deterministic duplicate detection using Sentence Transformers and cosine similarity
-- Priority ranking based on urgency, confidence, recency, and duplicate count
-- Report filtering, search, pagination, and ordering
-- Manager-only status updates and deletion
-- Analytics summary
-- Standardized bilingual API responses
-- JWT authentication for manager operations
-- Swagger/OpenAPI documentation
-- PostgreSQL with `pgvector`
-- Docker-based local and deployment setup
+| Area | Technology | Use in this project | Reference |
+| --- | --- | --- | --- |
+| Backend framework | Django | Project structure, ORM, settings, admin, migrations | [Django Docs](https://docs.djangoproject.com/) |
+| API framework | Django REST Framework | API views, serializers, validation, authentication hooks, throttling | [DRF Docs](https://www.django-rest-framework.org/) |
+| Authentication | Simple JWT | Bearer access/refresh tokens for manager endpoints | [Simple JWT Docs](https://django-rest-framework-simplejwt.readthedocs.io/) |
+| API documentation | drf-spectacular | OpenAPI schema, Swagger UI, ReDoc | [drf-spectacular Docs](https://drf-spectacular.readthedocs.io/) |
+| Database | PostgreSQL | Production relational database | [PostgreSQL Docs](https://www.postgresql.org/docs/) |
+| Vector support | pgvector | Intended vector extension for embedding search in PostgreSQL | [pgvector](https://github.com/pgvector/pgvector) |
+| LLM provider | Gemini API | Structured report triage and feature extraction | [Gemini API Docs](https://ai.google.dev/gemini-api/docs) |
+| Embeddings | Sentence Transformers | Multilingual report/location embeddings for duplicate detection | [Sentence Transformers Docs](https://www.sbert.net/) |
+| Containers | Docker Compose | Local app + database orchestration | [Docker Compose Docs](https://docs.docker.com/compose/) |
 
-## Technology Stack
+## Quick Start with Docker
 
-- Python 3.12
-- Django
-- Django REST Framework
-- PostgreSQL
-- pgvector
-- Gemini API
-- Sentence Transformers
-- SimpleJWT
-- drf-spectacular
-- django-filter
-- Docker
-- Docker Compose
-- Gunicorn
+Create the environment file:
 
-## Architecture
-
-```text
-Client Request
-    |
-    v
-Django REST Framework
-    |
-    +--> Request Validation
-    |
-    +--> Gemini Triage Service
-    |       +--> Language detection
-    |       +--> Category classification
-    |       +--> Urgency classification
-    |       +--> Summary generation
-    |       +--> Suggested action
-    |       +--> Confidence and feature extraction
-    |
-    +--> Duplicate Detection Service
-    |       +--> Text and location normalization
-    |       +--> Sentence Transformer embedding
-    |       +--> pgvector candidate search
-    |       +--> Cosine similarity
-    |       +--> Hybrid duplicate score
-    |
-    +--> Priority Calculation
-    |
-    +--> PostgreSQL Persistence
-    |
-    v
-Standardized Localized Response
+```bash
+cp .env.example .env
 ```
 
-## Project Structure
+Update `.env` values as needed, especially `DJANGO_SECRET_KEY`, database credentials, and `GEMINI_API_KEY`.
 
-The standard Django scaffold is omitted below.
+Build and start the stack:
 
-```text
-core/
-├── constants/
-│   ├── categories.py
-│   ├── urgencies.py
-│   ├── statuses.py
-│   ├── languages.py
-│   └── duplicate_detection.py
-├── responses/
-│   ├── messages.py
-│   ├── codes.py
-│   └── renderer.py
-├── exceptions/
-│   ├── exceptions.py
-│   └── handler.py
-├── pagination.py
-└── permissions.py
-
-services/
-├── llm/
-│   ├── client.py
-│   ├── schemas.py
-│   ├── prompts.py
-│   ├── triage_service.py
-│   ├── validators.py
-│   └── fallback.py
-├── duplicate_detection/
-│   ├── embedding_service.py
-│   ├── normalizers.py
-│   ├── candidate_service.py
-│   ├── similarity_service.py
-│   ├── scoring.py
-│   └── duplicate_service.py
-└── priority/
-    └── calculator.py
-
-docs/
-├── architecture.md
-└── openapi.yaml
-
-requirements/
-├── base.txt
-├── development.txt
-└── production.txt
+```bash
+docker compose --env-file .env up -d --build
 ```
 
-## Required API Endpoints
+Run database migrations:
+
+```bash
+docker compose exec web python manage.py migrate
+```
+
+Collect static files for production deployments:
+
+```bash
+docker compose exec web python manage.py collectstatic --noinput
+```
+
+Create a manager user:
+
+```bash
+docker compose exec web python manage.py createsuperuser
+```
+
+Follow logs:
+
+```bash
+docker compose logs -f web
+```
+
+Run tests:
+
+```bash
+docker compose exec web python manage.py test api
+```
+
+Validate/export OpenAPI schema:
+
+```bash
+docker compose exec web python manage.py spectacular --file docs/openapi.yaml --validate
+```
+
+Stop the stack:
+
+```bash
+docker compose down
+```
+
+## Unit Tests
+
+Unit tests live in `api/tests.py` and run with Django's built-in test runner.
+
+Run the full API test suite:
+
+```bash
+docker compose exec web python manage.py test api
+```
+
+Run one specific test class or test method:
+
+```bash
+docker compose exec web python manage.py test api.tests.ReportCreatePipelineTests
+docker compose exec web python manage.py test api.tests.ReportCreatePipelineTests.test_report_create_persists_llm_triage_output
+```
+
+Current test coverage focuses on:
+
+- Manager authentication flows.
+- Report creation and LLM triage persistence.
+- Duplicate detection behavior.
+- Report filtering, retrieval, status updates, and stats summary.
+- Rate limiting and standardized response rendering.
+
+## Request Headers
+
+Use JSON for all request bodies:
 
 ```http
-POST   /api/reports
-GET    /api/reports
-GET    /api/reports/{report_id}
-PATCH  /api/reports/{report_id}/status
-DELETE /api/reports/{report_id}
-GET    /api/reports/stats/summary
+Content-Type: application/json
 ```
 
-Authentication support may expose additional login, token refresh, logout, and profile endpoints.
+Localized response messages are selected from the language header:
 
-## Report Submission
-
-Example request:
-
-```json
-{
-  "name": "Rahim",
-  "contact": "017xxxxxxxx",
-  "location": "Sylhet Bondor Bazar",
-  "description": "There is a fire near a shop and people are trapped.",
-  "language": "en"
-}
+```http
+Accept-Language: en
+Accept-Language: bn
 ```
 
-The system generates and stores:
+Authenticated manager requests use JWT bearer auth:
 
-```json
-{
-  "category": "fire",
-  "urgency": "critical",
-  "summary": "A fire was reported near a shop with people possibly trapped.",
-  "suggestedAction": "Immediately notify the fire service and emergency responders.",
-  "confidence": 0.94,
-  "possibleDuplicate": false,
-  "matchedReportId": null,
-  "duplicateCount": 0,
-  "priorityScore": 96,
-  "status": "pending"
-}
+```http
+Authorization: Bearer <access_token>
 ```
 
-Every report is stored independently. Similar reports are not merged, dropped, or overwritten.
-
-## Allowed Values
-
-### Categories
-
-```text
-medical
-fire
-accident
-crime
-flood
-utility
-public_service
-infrastructure
-other
-```
-
-### Urgency Levels
-
-```text
-low
-medium
-high
-critical
-```
-
-### Report Statuses
-
-```text
-pending
-in_review
-assigned
-resolved
-rejected
-```
-
-### Report Languages
-
-```text
-en
-bn
-unknown
-```
-
-## Duplicate Detection
-
-Duplicate detection is deterministic and uses:
-
-1. Multilingual Sentence Transformer embeddings
-2. PostgreSQL `pgvector`
-3. Cosine similarity
-4. Location similarity
-5. Category similarity
-6. Temporal proximity
-
-Recommended scoring model:
-
-```text
-final_score =
-    0.55 * description_similarity
-  + 0.30 * location_similarity
-  + 0.10 * category_similarity
-  + 0.05 * temporal_similarity
-```
-
-A location safety threshold prevents semantically similar reports from different areas from being grouped incorrectly.
-
-Duplicate detection only affects metadata and ranking:
-
-```text
-possible_duplicate
-matched_report_id
-similarity_score
-duplicate_count
-duplicate_group_key
-priority_score
-```
-
-## Priority Ranking
-
-Priority is calculated deterministically using:
-
-```text
-urgency score
-+ confidence bonus
-+ capped duplicate bonus
-+ recency bonus
-```
-
-Duplicate count increases priority as a corroboration signal, but its contribution is capped so repeated low-risk reports cannot outrank a genuinely critical emergency.
-
-## AI Responsibility
-
-Gemini is responsible for:
-
-- Detecting report language
-- Classifying category
-- Suggesting urgency
-- Generating a concise summary
-- Generating a responder-focused suggested action
-- Returning a confidence score
-- Extracting important incident features
-
-Gemini does not:
-
-- Write directly to the database
-- Make final duplicate decisions
-- Calculate priority
-- Update report status
-- Perform authorization
-- Make autonomous emergency actions
-
-All Gemini output is validated against a strict structured schema before use.
-
-## Response Format
-
-All API responses follow one standardized structure:
+The API response envelope is standardized:
 
 ```json
 {
@@ -292,271 +133,210 @@ All API responses follow one standardized structure:
 }
 ```
 
-### Response Language
+## User Scopes
 
-Supported response languages:
+| Scope | Auth required | Permissions |
+| --- | --- | --- |
+| Public reporter | No | Create reports, list reports, view report details |
+| Manager | Yes, `is_staff=true` default Django user | Logout, profile, delete reports, update report status, view stats |
 
-```text
-en
-bn
+Manager login uses the default Django `User` model. The account must be active and staff-enabled.
+
+## Endpoints
+
+All endpoints are prefixed with `/api/v1`.
+
+Full request/response contracts are documented in [`docs/api-endpoints.md`](docs/api-endpoints.md).
+
+```http
+POST   /api/v1/auth/login
+POST   /api/v1/auth/refresh
+POST   /api/v1/auth/logout
+GET    /api/v1/auth/me
+GET    /api/v1/reports
+POST   /api/v1/reports
+GET    /api/v1/reports/stats/summary
+GET    /api/v1/reports/<report_id>
+DELETE /api/v1/reports/<report_id>
+PATCH  /api/v1/reports/<report_id>/status
 ```
 
-Language resolution order:
+### Auth Endpoints
+
+| Method | Endpoint | Scope | Body |
+| --- | --- | --- | --- |
+| `POST` | `/api/v1/auth/login` | Public | `email`, `password` |
+| `POST` | `/api/v1/auth/refresh` | Public | `refresh` |
+| `POST` | `/api/v1/auth/logout` | Manager | `refresh` |
+| `GET` | `/api/v1/auth/me` | Manager | None |
+
+### Report Endpoints
+
+| Method | Endpoint | Scope | Notes |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/reports` | Public | Supports filters, ordering, and pagination |
+| `POST` | `/api/v1/reports` | Public | Runs LLM triage, duplicate detection, and priority scoring |
+| `GET` | `/api/v1/reports/<report_id>` | Public | Returns a single report |
+| `DELETE` | `/api/v1/reports/<report_id>` | Manager | Deletes a report |
+| `PATCH` | `/api/v1/reports/<report_id>/status` | Manager | Updates report status |
+| `GET` | `/api/v1/reports/stats/summary` | Manager | Returns dashboard summary counts |
+
+`GET /api/v1/reports` query parameters:
 
 ```text
-1. lang query parameter
-2. Accept-Language header
-3. English fallback
-```
-
-Machine-readable fields are never translated:
-
-```text
-code
 category
 urgency
 status
-IDs
-field names
-pagination keys
+search
+date_from
+date_to
+possible_duplicate
+ordering
+page
+page_size
 ```
 
-Only human-readable messages are localized.
+Example report submission:
 
-## Authentication and Permissions
+```json
+{
+  "name": "sajid",
+  "contact": "017xxxxxxxx",
+  "location": "jigatola",
+  "description": "an old building collapsed on another building, atleast 10 death, 50 trapped inside, need help asap",
+  "language": "en"
+}
+```
 
-Manager operations require JWT authentication.
+## Request Validation
 
-Recommended access policy:
+This is a Python/Django backend, so request validation is implemented with DRF serializers rather than JavaScript schema validators like Joi or Zod.
+
+Current validation includes:
+
+- Required fields and type checks through serializers.
+- Choice validation for `language`, `status`, category-like model fields, and urgency-like model fields.
+- Length limits for `name`, `contact`, and `location`.
+- Non-empty trimming checks for `description`, `location`, and optional `contact`.
+- JWT refresh-token validation for refresh/logout flows.
+- LLM output validation before storing AI-generated triage data.
+
+If a frontend is added later, its Joi/Zod schemas should mirror the DRF serializer contracts rather than replace server-side validation.
+
+## Rate Limiting
+
+Rate limiting uses DRF `ScopedRateThrottle`. Defaults can be overridden with environment variables.
+
+| Scope | Default | Environment variable |
+| --- | --- | --- |
+| Login | `5/minute` | `THROTTLE_AUTH_LOGIN` |
+| Token refresh | `10/minute` | `THROTTLE_AUTH_REFRESH` |
+| Logout | `20/minute` | `THROTTLE_AUTH_LOGOUT` |
+| Manager profile | `60/minute` | `THROTTLE_AUTH_ME` |
+| Report reads | `120/minute` | `THROTTLE_REPORTS_READ` |
+| Report create | `10/minute` | `THROTTLE_REPORTS_CREATE` |
+| Report delete | `30/minute` | `THROTTLE_REPORTS_DELETE` |
+| Report status update | `60/minute` | `THROTTLE_REPORTS_STATUS_UPDATE` |
+| Report stats | `60/minute` | `THROTTLE_REPORTS_STATS` |
+
+When a client exceeds its scope, DRF returns a throttled response with the standard response renderer.
+
+## Swagger/OpenAPI
+
+Interactive documentation is generated by drf-spectacular:
+
+```http
+GET /api/schema/
+GET /api/docs/
+GET /api/redoc/
+```
+
+- `/api/schema/` serves the OpenAPI schema.
+- `/api/docs/` serves Swagger UI.
+- `/api/redoc/` serves ReDoc.
+- `docs/openapi.yaml` can be regenerated with the `spectacular` command shown in the Docker section.
+
+## Advanced Duplicate Detection
+
+The duplicate layer is deterministic and metadata-only: every report is stored independently, even when a match is found.
+
+Pipeline:
+
+1. Normalize description/location inputs.
+2. Generate multilingual Sentence Transformer embeddings.
+3. Compare candidate reports inside the configured time window.
+4. Score with cosine similarity plus location/category/time signals.
+5. Store duplicate metadata on the new report.
+6. Recalculate priority for affected duplicate-group reports.
+
+Stored duplicate fields include:
 
 ```text
-General users:
-- Submit reports
-- View report lists
-- View report details
-
-Managers:
-- All general operations
-- Update report status
-- Delete reports
-- View full operational information
-- Access analytics
+possible_duplicate
+matched_report_id
+similarity_score
+duplicate_count
+duplicate_group_key
+duplicate_detection_status
+duplicate_detection_method
 ```
 
-Manager access can be represented using Django `is_staff`.
-
-## Local Setup
-
-### 1. Clone the repository
-
-```bash
-git clone <repository-url>
-cd <repository-directory>
-```
-
-### 2. Create the environment file
-
-```bash
-cp .env.example .env
-```
-
-Update the required values:
-
-```env
-DJANGO_SECRET_KEY=change-me
-DJANGO_DEBUG=true
-DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
-
-POSTGRES_DB=crisisdesk
-POSTGRES_USER=crisisdesk
-POSTGRES_PASSWORD=change-me
-POSTGRES_HOST=db
-POSTGRES_PORT=5432
-
-GEMINI_API_KEY=
-GEMINI_MODEL=
-GEMINI_TIMEOUT_SECONDS=20
-GEMINI_MAX_RETRIES=1
-GEMINI_TEMPERATURE=0.1
-
-DUPLICATE_WINDOW_HOURS=72
-MIN_DESCRIPTION_SIMILARITY=0.72
-MIN_LOCATION_SIMILARITY=0.60
-DUPLICATE_THRESHOLD=0.78
-
-DEFAULT_RESPONSE_LANGUAGE=en
-
-JWT_ACCESS_MINUTES=30
-JWT_REFRESH_DAYS=1
-```
-
-### 3. Start the application
-
-```bash
-docker compose up --build
-```
-
-### 4. Run migrations
-
-```bash
-docker compose exec backend python manage.py migrate
-```
-
-### 5. Create a manager account
-
-```bash
-docker compose exec backend python manage.py createsuperuser
-```
-
-### 6. Run Django checks
-
-```bash
-docker compose exec backend python manage.py check
-```
-
-## Development Without Docker
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements/development.txt
-python manage.py migrate
-python manage.py runserver
-```
-
-A local PostgreSQL instance with the `pgvector` extension is required.
-
-## API Documentation
-
-Swagger UI:
+Important environment knobs:
 
 ```text
-/api/docs/
+DUPLICATE_WINDOW_HOURS
+MIN_DESCRIPTION_SIMILARITY
+MIN_LOCATION_SIMILARITY
+DUPLICATE_THRESHOLD
 ```
 
-ReDoc:
+## LLM Use Case
+
+`POST /api/v1/reports` calls the LLM triage layer before persistence. Gemini receives the citizen report and returns structured crisis metadata.
+
+The LLM layer extracts:
+
+- Detected language.
+- Incident category.
+- Urgency level.
+- Human-readable summary.
+- Suggested responder action.
+- Confidence score.
+- Structured features such as trapped people, casualties, injuries, blocked roads, affected count, and landmark.
+
+The API stores the validated LLM result on the `Report` model and uses it for duplicate detection and priority scoring. If Gemini is unavailable, invalid, or not configured, the fallback triage path creates a safe manual-review report instead of failing the submission.
+
+Useful LLM environment variables:
 
 ```text
-/api/redoc/
+GEMINI_API_KEY
+GEMINI_MODEL
+GEMINI_TIMEOUT_SECONDS
+GEMINI_MAX_RETRIES
+GEMINI_TEMPERATURE
 ```
 
-Raw OpenAPI schema:
+## Stats Summary Response
 
-```text
-/api/schema/
+`GET /api/v1/reports/stats/summary` returns manager dashboard data:
+
+```json
+{
+  "totalReports": 45,
+  "criticalReports": 7,
+  "pendingReports": 18,
+  "resolvedReports": 10,
+  "categoryBreakdown": {
+    "fire": 5,
+    "medical": 8,
+    "flood": 3,
+    "utility": 12
+  },
+  "urgencyBreakdown": {
+    "low": 9,
+    "medium": 18,
+    "high": 11,
+    "critical": 7
+  }
+}
 ```
-
-Generate and validate the schema:
-
-```bash
-python manage.py spectacular \
-  --file docs/openapi.yaml \
-  --validate
-```
-
-## Testing
-
-Run all tests:
-
-```bash
-pytest
-```
-
-Run with coverage:
-
-```bash
-pytest --cov
-```
-
-Important test areas:
-
-- Report submission validation
-- Gemini structured-output handling
-- Gemini failure fallback
-- Bangla and English reports
-- Duplicate detection
-- Similar descriptions with different locations
-- Filtering and pagination
-- Manager permissions
-- Status transitions
-- Analytics accuracy
-- Response localization
-
-## Docker Services
-
-```text
-backend
-- Django REST Framework
-- Gunicorn
-- Gemini integration
-- Sentence Transformer model
-
-db
-- PostgreSQL
-- pgvector extension
-```
-
-The Docker Compose setup uses a persistent model-cache volume so the Sentence Transformer model is not downloaded after every container rebuild.
-
-## Git Workflow
-
-Recommended branches:
-
-```text
-main
-feature/report-ingestion
-feature/report-query
-feature/report-operations
-```
-
-Responsibilities:
-
-```text
-feature/report-ingestion
-- Report submission
-- Gemini integration
-- Duplicate detection
-- Priority calculation
-
-feature/report-query
-- Report list
-- Report details
-- Report deletion
-- Filtering and pagination
-
-feature/report-operations
-- Status updates
-- Analytics summary
-```
-
-Each branch should include:
-
-- Endpoint implementation
-- Validation
-- Permissions
-- Tests
-- Swagger documentation
-
-All shared constants, models, response formats, and service contracts must be finalized before parallel feature development begins.
-
-## External Services and Libraries
-
-This project uses:
-
-- Google Gemini API
-- Django
-- Django REST Framework
-- PostgreSQL
-- pgvector
-- Sentence Transformers
-- SimpleJWT
-- drf-spectacular
-- django-filter
-- Docker
-- Gunicorn
-
-All external APIs, SDKs, and open-source libraries should be credited in the final submission.
-
-## License
-
-Add the selected project license before publication.

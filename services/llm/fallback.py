@@ -1,15 +1,19 @@
 from core.constants.categories import ReportCategory
+from core.constants.languages import SupportedLanguage
 from core.constants.urgencies import UrgencyLevel
-from services.llm.schemas import TriageResult
+from services.llm.constants import AI_STATUS_FALLBACK
+from services.llm.schemas import ExtractedFeatures, TriageResult
 
 
 def manual_review_result(*, description: str, location: str) -> TriageResult:
     return TriageResult(
+        detected_language=SupportedLanguage.UNKNOWN,
         category=ReportCategory.OTHER,
         urgency=UrgencyLevel.MEDIUM,
-        summary=description[:240],
-        suggested_action="Manual review required before dispatch.",
+        summary="The submitted report requires manual review.",
+        suggested_action="Assign this report to a human operator for assessment.",
         confidence=0.0,
-        features={"location": location},
-        needs_manual_review=True,
+        features=ExtractedFeatures(),
+        ai_status=AI_STATUS_FALLBACK,
+        requires_manual_review=True,
     )

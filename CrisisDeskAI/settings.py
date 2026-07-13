@@ -17,6 +17,36 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+ENV_FILE_PATH = BASE_DIR / '.env'
+
+
+def load_environment_file(path):
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        load_dotenv = None
+
+    if load_dotenv is not None:
+        return load_dotenv(path)
+
+    if not path.exists():
+        return False
+
+    loaded = False
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+
+        key, value = line.split('=', 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+        loaded = True
+
+    return loaded
+
+
+ENV_FILE_LOADED = load_environment_file(ENV_FILE_PATH)
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
@@ -47,6 +77,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'drf_spectacular',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
     'api',
@@ -67,7 +98,7 @@ ROOT_URLCONF = 'CrisisDeskAI.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -128,7 +159,8 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = os.getenv('DJANGO_STATIC_URL', 'static/')
+STATIC_ROOT = Path(os.getenv('DJANGO_STATIC_ROOT', BASE_DIR / 'staticfiles'))
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
@@ -140,8 +172,47 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_THROTTLE_CLASSES': (
+        'rest_framework.throttling.ScopedRateThrottle',
+    ),
+    'DEFAULT_THROTTLE_RATES': {
+        'auth_login': os.getenv('THROTTLE_AUTH_LOGIN', '5/minute'),
+        'auth_refresh': os.getenv('THROTTLE_AUTH_REFRESH', '10/minute'),
+        'auth_logout': os.getenv('THROTTLE_AUTH_LOGOUT', '20/minute'),
+        'auth_me': os.getenv('THROTTLE_AUTH_ME', '60/minute'),
+        'reports_read': os.getenv('THROTTLE_REPORTS_READ', '120/minute'),
+        'reports_create': os.getenv('THROTTLE_REPORTS_CREATE', '10/minute'),
+        'reports_delete': os.getenv('THROTTLE_REPORTS_DELETE', '30/minute'),
+        'reports_status_update': os.getenv('THROTTLE_REPORTS_STATUS_UPDATE', '60/minute'),
+        'reports_stats': os.getenv('THROTTLE_REPORTS_STATS', '60/minute'),
+    },
     'DEFAULT_PAGINATION_CLASS': 'core.pagination.StandardResultsSetPagination',
     'PAGE_SIZE': 20,
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'CrisisDesk AI API',
+    'DESCRIPTION': (
+        'Emergency and public-service report triage API with manager auth, '
+        'LLM triage, duplicate detection, priority scoring, and analytics.'
+    ),
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'SCHEMA_PATH_PREFIX': '/api/v1',
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SECURITY': [
+        {'bearerAuth': []},
+    ],
+    'APPEND_COMPONENTS': {
+        'securitySchemes': {
+            'bearerAuth': {
+                'type': 'http',
+                'scheme': 'bearer',
+                'bearerFormat': 'JWT',
+            },
+        },
+    },
 }
 
 SIMPLE_JWT = {
@@ -156,7 +227,7 @@ SIMPLE_JWT = {
 }
 
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
-GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-2.0-flash')
+GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-2.5-flash')
 GEMINI_TIMEOUT_SECONDS = int(os.getenv('GEMINI_TIMEOUT_SECONDS', '20'))
 GEMINI_MAX_RETRIES = int(os.getenv('GEMINI_MAX_RETRIES', '1'))
 GEMINI_TEMPERATURE = float(os.getenv('GEMINI_TEMPERATURE', '0.1'))

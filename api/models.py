@@ -17,6 +17,14 @@ class Report(models.Model):
         FALLBACK = "fallback", "Fallback"
         FAILED = "failed", "Failed"
 
+<<<<<<< HEAD
+=======
+    class DuplicateDetectionMethod(models.TextChoices):
+        EMBEDDING = "embedding", "Embedding"
+        KEYWORD_FALLBACK = "keyword_fallback", "Keyword Fallback"
+        UNAVAILABLE = "unavailable", "Unavailable"
+
+>>>>>>> origin
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     reporter_name = models.CharField(max_length=255, blank=True)
@@ -85,6 +93,14 @@ class Report(models.Model):
         default=ProcessingStatus.PENDING,
         db_index=True,
     )
+<<<<<<< HEAD
+=======
+    duplicate_detection_method = models.CharField(
+        max_length=30,
+        choices=DuplicateDetectionMethod.choices,
+        default=DuplicateDetectionMethod.UNAVAILABLE,
+    )
+>>>>>>> origin
 
     priority_score = models.PositiveSmallIntegerField(
         default=0,
