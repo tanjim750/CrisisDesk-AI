@@ -72,6 +72,77 @@
             height: auto;
         }
 
+        .credential-widget {
+            position: fixed;
+            top: 18px;
+            right: 18px;
+            z-index: 20;
+        }
+
+        .credential-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            color: #f0f6fc;
+            background: #238636;
+            border: 1px solid #2ea043;
+            border-radius: 999px;
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+            cursor: pointer;
+            font: inherit;
+            font-weight: 600;
+        }
+
+        .credential-button:hover {
+            background: #2ea043;
+        }
+
+        .credential-panel {
+            display: none;
+            width: min(320px, calc(100vw - 32px));
+            margin-top: 10px;
+            padding: 16px;
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            background: #161b22;
+            box-shadow: 0 14px 44px rgba(0, 0, 0, 0.45);
+        }
+
+        .credential-panel.is-visible {
+            display: block;
+        }
+
+        .credential-panel h2 {
+            margin: 0 0 12px;
+            color: #f0f6fc;
+            font-size: 16px;
+        }
+
+        .credential-field {
+            margin: 10px 0;
+        }
+
+        .credential-label {
+            display: block;
+            margin-bottom: 5px;
+            color: #8b949e;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .credential-value {
+            display: block;
+            padding: 9px 10px;
+            color: #c9d1d9;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Consolas, monospace;
+            overflow-wrap: anywhere;
+        }
+
         @media (max-width: 767px) {
             .page-wrapper {
                 padding: 0;
@@ -86,11 +157,48 @@
             .error-message {
                 margin: 40px 16px;
             }
+
+            .credential-widget {
+                top: 12px;
+                right: 12px;
+            }
+
+            .credential-button {
+                padding: 8px 11px;
+                font-size: 13px;
+            }
         }
     </style>
 </head>
 
 <body>
+    {{ test_credentials|json_script:"test-credentials" }}
+
+    <aside class="credential-widget" aria-live="polite">
+        <button
+            id="credentialButton"
+            class="credential-button"
+            type="button"
+            aria-expanded="false"
+            aria-controls="credentialPanel"
+        >
+            <span aria-hidden="true">🔑</span>
+            <span>Get Test Credentials</span>
+        </button>
+
+        <section id="credentialPanel" class="credential-panel" aria-label="Test credentials">
+            <h2>Test Credentials</h2>
+            <div class="credential-field">
+                <span class="credential-label">Email</span>
+                <code id="credentialEmail" class="credential-value">Not configured</code>
+            </div>
+            <div class="credential-field">
+                <span class="credential-label">Password</span>
+                <code id="credentialPassword" class="credential-value">Not configured</code>
+            </div>
+        </section>
+    </aside>
+
     <main class="page-wrapper">
         <article id="content" class="markdown-body">
             <div class="loading">Loading documentation...</div>
@@ -104,6 +212,15 @@
             "https://raw.githubusercontent.com/tanjim750/CrisisDesk-AI/main/README.md";
 
         const contentElement = document.getElementById("content");
+        const credentialButton = document.getElementById("credentialButton");
+        const credentialPanel = document.getElementById("credentialPanel");
+        const credentialEmail = document.getElementById("credentialEmail");
+        const credentialPassword = document.getElementById("credentialPassword");
+        const testCredentials = getTestCredentials();
+
+        credentialEmail.textContent = testCredentials.email || "Not configured";
+        credentialPassword.textContent = testCredentials.password || "Not configured";
+        credentialButton.addEventListener("click", toggleCredentialPanel);
 
         async function loadReadme() {
             try {
@@ -166,6 +283,26 @@
                     link.textContent = "API Endpoints";
                 }
             });
+        }
+
+        function getTestCredentials() {
+            const scriptElement = document.getElementById("test-credentials");
+
+            if (!scriptElement) {
+                return {};
+            }
+
+            try {
+                return JSON.parse(scriptElement.textContent);
+            } catch (error) {
+                console.error(error);
+                return {};
+            }
+        }
+
+        function toggleCredentialPanel() {
+            const isVisible = credentialPanel.classList.toggle("is-visible");
+            credentialButton.setAttribute("aria-expanded", String(isVisible));
         }
 
         

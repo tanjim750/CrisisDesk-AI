@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Count
 from drf_spectacular.utils import extend_schema
@@ -68,7 +69,16 @@ class MethodScopedThrottleMixin:
 
 class ProjectDocsView(View):
     def get(self, request):
-        return render(request, "index.html")
+        return render(
+            request,
+            "index.html",
+            {
+                "test_credentials": {
+                    "email": settings.TEST_MANAGER_EMAIL,
+                    "password": settings.TEST_MANAGER_PASSWORD,
+                },
+            },
+        )
 
 
 class APIDocsView(View):
