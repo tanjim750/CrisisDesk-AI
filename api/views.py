@@ -7,6 +7,8 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.http import Http404
+from django.views import View
+from django.shortcuts import render
 
 from api.models import Report
 from api.serializers import (
@@ -64,6 +66,15 @@ class MethodScopedThrottleMixin:
 
         return super().get_throttles()
 
+class ProjectDocsView(View):
+    def get(self, request):
+        return render(request, "index.html")
+
+
+class APIDocsView(View):
+    def get(self, request):
+        return render(request, "api-endpoints.html")
+    
 
 class ManagerLoginView(APIView):
     permission_classes = [AllowAny]
