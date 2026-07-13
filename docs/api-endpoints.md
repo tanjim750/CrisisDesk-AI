@@ -39,6 +39,17 @@ Validation/error responses keep the same envelope and put details in `errors`.
 
 ## Auth Endpoints
 
+### Test Credentials
+
+Public docs use placeholder credentials only. Replace them with a local manager account created on your deployment.
+
+```json
+{
+  "email": "test-manager@example.com",
+  "password": "change-me"
+}
+```
+
 ### POST `/api/v1/auth/login`
 
 Authenticates a manager user. The user must be active and `is_staff=true`.
@@ -49,8 +60,8 @@ Request:
 
 ```json
 {
-  "email": "manager@example.com",
-  "password": "strong-password"
+  "email": "test-manager@example.com",
+  "password": "change-me"
 }
 ```
 
@@ -66,7 +77,7 @@ Response `200`:
     "refresh": "jwt-refresh-token",
     "user": {
       "id": 1,
-      "email": "manager@example.com",
+      "email": "test-manager@example.com",
       "username": "manager",
       "first_name": "Manager",
       "last_name": "User",
@@ -151,7 +162,7 @@ Response `200`:
   "message": "Profile retrieved successfully.",
   "data": {
     "id": 1,
-    "email": "manager@example.com",
+    "email": "test-manager@example.com",
     "username": "manager",
     "first_name": "Manager",
     "last_name": "User",

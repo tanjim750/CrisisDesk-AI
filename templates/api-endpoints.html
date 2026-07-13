@@ -125,6 +125,7 @@
                 });
 
                 contentElement.innerHTML = marked.parse(markdown);
+                replaceCredentialPlaceholders();
             } catch (error) {
                 console.error(error);
 
@@ -146,8 +147,25 @@
                 .replaceAll("'", "&#039;");
         }
 
+        function replaceCredentialPlaceholders() {
+            const credentialPlaceholders = {
+                "manager@example.com": "test-manager@example.com",
+                "strong-password": "change-me"
+            };
+
+            contentElement.querySelectorAll("code, pre, td, p").forEach(element => {
+                Object.entries(credentialPlaceholders).forEach(([originalValue, placeholderValue]) => {
+                    if (element.textContent.includes(originalValue)) {
+                        element.textContent = element.textContent.replaceAll(
+                            originalValue,
+                            placeholderValue
+                        );
+                    }
+                });
+            });
+        }
+
         loadReadme();
     </script>
 </body>
 </html>
-
